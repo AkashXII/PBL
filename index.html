@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>P2P Compute Portal (WebSocket Version)</title>
+  <style>
+    body { font-family: Arial; padding: 20px; max-width: 700px; margin: auto; }
+    .box { border: 1px solid #aaa; padding: 15px; margin-top: 20px; }
+    h2 { margin-top: 0; }
+    #logProvider, #logRequester {
+      background: #eee; height: 150px; padding: 10px; overflow:auto;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>P2P Compute Portal (Backend Compatible)</h1>
+
+<button id="providerBtn">Become Provider</button>
+<button id="requesterBtn">Become Requester</button>
+
+<!-- PROVIDER -->
+<div class="box" id="providerUI" style="display:none;">
+  <h2>Provider</h2>
+  <p>Your Peer ID: <b id="providerId"></b></p>
+  <div id="logProvider"></div>
+</div>
+
+<!-- REQUESTER -->
+<div class="box" id="requesterUI" style="display:none;">
+  <h2>Requester</h2>
+
+  <p><b>Online Peers:</b></p>
+  <button onclick="loadPeers()">Refresh</button>
+  <pre id="peerList"></pre>
+
+  <h3>Send File Task (Wordcount)</h3>
+  <input type="file" id="fileInput">
+  <button onclick="sendTask()">Send Task</button>
+
+  <h3>Output</h3>
+  <div id="logRequester"></div>
+</div>
+
+<script>
+/* --------------------------
+   Logging Helpers
+--------------------------- */
+function logProvider(msg) {
+  document.getElementById("logProvider").innerHTML += msg + "<br>";
+}
+function logRequester(msg) {
+  document.getElementById("logRequester").innerHTML += msg + "<br>";
+}
+
+let ws = null;
+let myPeerId = null;
+
+/* --------------------------
+   1. PROVIDER MODE
+--------------------------- */
+document.getElementById("providerBtn").onclick = () => {
+  document.getElementById("providerUI").style.display = "block";
+
+  myPeerId = "peer_" + Math.floor(Math.random() * 99999);
+  document.getElementById("providerId").innerText = myPeerId;
+
+  ws = new WebSocket("ws://localhost:9000");
+
+  ws.onopen = () => {
+    logProvider("Connected to backend");
+
+    ws.send(JSON.stringify({
+      type: "register",
+      peerId: myPeerId,
+      meta: { name: myPeerId }
+    }));
+  };
+
+  ws.onmessage = evt => {
+    const msg = JSON.parse(evt.data);
+
+    if (msg.type === "info") {
+      logProvider("Registered OK");
+      return;
+    }
+
+    if (msg.type === "task") {
+      logProvider("Received Task: " + JSON.stringify(msg.task));
+
+      let result = null;
+      if (msg.task.type === "wordcount" && msg.file) {
+        const text = atob(msg.file.dataBase64);
+        result = text.split(/\s+/).length;
+      }
+
+      ws.send(JSON.stringify({
+        type: "taskResult",
+        peerId: myPeerId,
+        taskId: msg.taskId,
+        result
+      }));
+
+      logProvider("Sent result: " + result);
+    }
+  };
+};
+
+/* --------------------------
+   2. REQUESTER MODE
+--------------------------- */
+document.getElementById("requesterBtn").onclick = () => {
+  document.getElementById("requesterUI").style.display = "block";
+};
+
+/* --------------------------
+   Load peers from backend
+--------------------------- */
+async function loadPeers() {
+  const res = await fetch("http://localhost:9000/peers");
+  const data = await res.json();
+  document.getElementById("peerList").textContent = JSON.stringify(data, null, 2);
+}
+
+/* --------------------------
+   Send file-based task
+--------------------------- */
+async function sendTask() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) return alert("Choose a file");
+
+  const form = new FormData();
+  form.append("task", JSON.stringify({ type: "wordcount" }));
+  form.append("file", file);
+
+  const res = await fetch("http://localhost:9000/task", {
+    method: "POST",
+    body: form
+  });
+
+  const out = await res.json();
+  logRequester("Task Response:");
+  logRequester(JSON.stringify(out, null, 2));
+}
+</script>
+
+</body>
+</html>
