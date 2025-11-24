@@ -10,18 +10,18 @@ class ModelInfo(BaseModel):
 
 
 class PeerRegisterRequest(BaseModel):
-    name: str = Field(..., example="Akash-GPU-PC")
-    host: str = Field(..., example="192.168.1.10")
-    port: int = Field(..., example=8001)
-    has_gpu: bool = Field(..., example=True)
-    gpu_memory_total_mb: Optional[int] = Field(None, example=8192)
-    gpu_memory_free_mb: Optional[int] = Field(None, example=4096)
+    name: str
+    host: str
+    port: int
+    has_gpu: bool
+    gpu_memory_total_mb: Optional[int]
+    gpu_memory_free_mb: Optional[int]
     models: List[ModelInfo] = Field(default_factory=list)
 
 
 class PeerHeartbeatRequest(BaseModel):
-    gpu_memory_free_mb: Optional[int] = Field(None, example=4096)
-    current_load_percent: Optional[float] = Field(None, ge=0, le=100, example=25.0)
+    gpu_memory_free_mb: Optional[int] = None
+    current_load_percent: Optional[float] = None
 
 
 class PeerResponse(BaseModel):
@@ -46,12 +46,8 @@ class JobStatus(str, Enum):
 
 class JobCreateRequest(BaseModel):
     requester_peer_id: str
-    model_name: str = Field(..., example="resnet50")
-    payload_url: Optional[str] = Field(
-        None,
-        example="http://requester-peer:8001/uploads/img123.png"
-    )
-    # Later: support base64 or other formats
+    model_name: str
+    payload_url: Optional[str] = None
 
 
 class JobUpdateStatusRequest(BaseModel):

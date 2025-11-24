@@ -3,84 +3,75 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 
 from .schemas import (
-    PeerRegisterRequest,
-    PeerHeartbeatRequest,
-    PeerResponse,
-    JobCreateRequest,
-    JobUpdateStatusRequest,
-    JobResponse,
+    PeerRegisterRequest, PeerHeartbeatRequest, PeerResponse,
+    JobCreateRequest, JobUpdateStatusRequest, JobResponse
 )
 from .registry import Registry
 
 app = FastAPI(
     title="Decentralized GPU P2P Inference Tracker",
-    version="0.1.0",
-    description="Tracker service for managing peers and inference jobs in a P2P GPU network.",
+    version="0.2.0",
+    description="Tracker service for managing peers and inference jobs."
 )
 
-# CORS – later we’ll put your React URL here
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # for dev only, restrict in prod
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],
     allow_headers=["*"],
+    allow_methods=["*"],
+    allow_credentials=True
 )
 
 registry = Registry()
 
-
-@app.get("/health", tags=["system"])
-def health_check():
+@app.get("/health")
+def health():
     return {"status": "ok"}
 
-
-# --------- Peer endpoints --------- #
-
-@app.post("/peers/register", response_model=PeerResponse, tags=["peers"])
+# ---- Peers ---- #
+@app.post("/peers/register", response_model=PeerResponse)
 def register_peer(payload: PeerRegisterRequest):
     return registry.register_peer(payload)
 
-
-@app.post("/peers/{peer_id}/heartbeat", response_model=PeerResponse, tags=["peers"])
+@app.post("/peers/{peer_id}/heartbeat", response_model=PeerResponse)
 def heartbeat(peer_id: str, payload: PeerHeartbeatRequest):
     try:
         return registry.heartbeat(peer_id, payload)
     except KeyError:
         raise HTTPException(status_code=404, detail="Peer not found")
 
-
-@app.get("/peers", response_model=List[PeerResponse], tags=["peers"])
+@app.get("/peers", response_model=List[PeerResponse])
 def list_peers(only_online: bool = True):
-    return registry.list_peers(only_online=only_online)
+    return registry.list_peers(only_online)
 
-
-# --------- Job endpoints --------- #
-
-@app.post("/jobs", response_model=JobResponse, tags=["jobs"])
+# ---- Jobs ---- #
+@app.post("/jobs", response_model=JobResponse)
 def create_job(payload: JobCreateRequest):
-    # TODO: validate requester_peer_id exists
     if payload.requester_peer_id not in registry.peers:
         raise HTTPException(status_code=400, detail="Requester peer not registered")
     return registry.create_job(payload)
 
-
-@app.get("/jobs", response_model=List[JobResponse], tags=["jobs"])
+@app.get("/jobs", response_model=List[JobResponse])
 def list_jobs():
     return registry.list_jobs()
 
-
-@app.get("/jobs/{job_id}", response_model=JobResponse, tags=["jobs"])
+@app.get("/jobs/{job_id}", response_model=JobResponse)
 def get_job(job_id: str):
     try:
         return registry.get_job(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
 
-
-@app.post("/jobs/{job_id}/status", response_model=JobResponse, tags=["jobs"])
+@app.post("/jobs/{job_id}/status", response_model=JobResponse)
 def update_job_status(job_id: str, payload: JobUpdateStatusRequest):
-    try:
-        return registry.update_job_status(job_id, payload)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Job not found")
+    return registry.update_job_status(job_id, payload)
+
+# ---- Worker Job Fetch ---- #
+@app.get("/workers/{peer_id}/next-job", response_model=Optional[JobResponse])
+def get_next_job(peer_id: str):
+    if peer_id not in registry.peers:
+        raise HTTPException(status_code=404, detail="Peer not found")
+    job = registry.get_next_assigned_job(peer_id)
+    if job:
+        return job.to_response()
+    return None
